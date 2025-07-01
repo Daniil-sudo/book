@@ -1,136 +1,131 @@
-import json
+import re
 
-def read_cook_book_json(filename):
+def read_cookbook_from_file(filename):
     """
-    Считывает кулинарную книгу из файла JSON и возвращает ее в виде словаря.
+    Считывает кулинарную книгу из файла и возвращает ее в виде словаря.
 
     Аргументы:
-        имя файла (str): Путь к файлу JSON, содержащему данные кулинарной книги.
+        имя файла (str): Имя файла, содержащего данные кулинарной книги.
 
     Возвращается:
         dict: словарь, представляющий кулинарную книгу. Возвращает пустой словарь
-              если файл не найден или если во время синтаксического анализа JSON произошла ошибка
+              если файл не найден или произошла ошибка.
     """
     try:
         with open(filename, 'r', encoding='utf-8') as f:
-            cook_book = json.load(f)  # Загружает данные JSON непосредственно в словарь
-            return cook_book
+            text = f.read()
+            return read_cookbook_from_string(text)
     except FileNotFoundError:
         print(f"Error: File '{filename}' not found.")
-        return {}
-    except json.JSONDecodeError:
-        print(f"Error: Invalid JSON format in file '{filename}'.")
         return {}
     except Exception as e:
         print(f"An error occurred: {e}")
         return {}
 
 
+def read_cookbook_from_string(text):
+    """
+    Построчное чтение книги.
+    """
+    cookbook = {}
+    dish_name = None
+    num_ingredients = None
+    ingredients = []
+    lines = text.splitlines()
+    line_index = 0
 
-filename = 'cook_book.json'
+    while line_index < len(lines):
+        line = lines[line_index].strip()
 
+        if not line:
+            line_index += 1
+            continue
 
-cook_book_data = {
-    'Омлет': [
-        {'ingredient_name': 'Яйцо', 'quantity': 2, 'measure': 'шт'},
-        {'ingredient_name': 'Молоко', 'quantity': 100, 'measure': 'мл'},
-        {'ingredient_name': 'Помидор', 'quantity': 2, 'measure': 'шт'}
-    ],
-    'Утка по-пекински': [
-        {'ingredient_name': 'Утка', 'quantity': 1, 'measure': 'шт'},
-        {'ingredient_name': 'Вода', 'quantity': 2, 'measure': 'л'},
-        {'ingredient_name': 'Мед', 'quantity': 3, 'measure': 'ст.л'},
-        {'ingredient_name': 'Соевый соус', 'quantity': 60, 'measure': 'мл'}
-    ],
-    'Запеченный картофель': [
-        {'ingredient_name': 'Картофель', 'quantity': 1, 'measure': 'кг'},
-        {'ingredient_name': 'Чеснок', 'quantity': 3, 'measure': 'зубч'},
-        {'ingredient_name': 'Сыр гауда', 'quantity': 100, 'measure': 'г'}
-    ]
-}
+        if dish_name is None:
+            dish_name = line
+            line_index += 1
+            continue
 
-try:
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(cook_book_data, f, indent=4, ensure_ascii=False)  # Сохраниение в JSON
-except Exception as e:
-    print(f"Error creating test file: {e}")
+        if num_ingredients is None:
+            try:
+                num_ingredients = int(line)
+                line_index += 1
+                continue
+            except ValueError:
+                print(f"Warning: Invalid number of ingredients: {line} for dish {dish_name}. Skipping dish.")
+                dish_name = None
+                num_ingredients = None
+                ingredients = []
+                line_index += 1
+                continue
 
-cook_book = read_cook_book_json(filename)
+        parts = re.split(r' \| ', line)
+        if len(parts) == 3:
+            ingredient_name, quantity_str, measure = parts
+            try:
+                quantity = int(quantity_str)
+                ingredients.append({
+                    'ingredient_name': ingredient_name,
+                    'quantity': quantity,
+                    'measure': measure.strip()
+                })
+            except ValueError:
+                print(f"Warning: Invalid quantity for ingredient '{ingredient_name}' in dish '{dish_name}'. Skipping ingredient.")
+        else:
+            print(f"Warning: Invalid ingredient line: '{line}'. Skipping.")
+        line_index += 1
 
-if cook_book:
-    print("Cookbook:")
-    print(json.dumps(cook_book, indent=4, ensure_ascii=False))
-else:
-    print("No cookbook found.")
+        if num_ingredients is not None and len(ingredients) == num_ingredients:
+            cookbook[dish_name] = ingredients
+            dish_name = None
+            num_ingredients = None
+            ingredients = []
 
-
-import json
-
-def read_cook_book_json(filename):
-    """Reads a cook book from a JSON file."""
-    try:
-        with open(filename, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print(f"Error: File '{filename}' not found.")
-        return {}
-    except json.JSONDecodeError:
-        print(f"Error: Invalid JSON format in file '{filename}'.")
-        return {}
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return {}
+    return cookbook
 
 def get_shop_list_by_dishes(dishes, person_count, cook_book):
-    """Calculates the required ingredients based on a list of dishes."""
+    """
+    Счет весов с учетом количества гостей
+    """
     shop_list = {}
     for dish_name in dishes:
         if dish_name not in cook_book:
-            print(f"Warning: Dish '{dish_name}' not found.")
+            print(f"Warning: Dish '{dish_name}' not found in the cookbook.")
             continue
-        for ing in cook_book[dish_name]:
-            name = ing['ingredient_name']
-            qty = ing['quantity'] * person_count
-            measure = ing['measure']
-            if name in shop_list:
-                shop_list[name]['quantity'] += qty
+
+        for ingredient in cook_book[dish_name]:
+            ingredient_name = ingredient['ingredient_name']
+            quantity = ingredient['quantity'] * person_count
+            measure = ingredient['measure']
+
+            if ingredient_name in shop_list:
+                shop_list[ingredient_name]['quantity'] += quantity
             else:
-                shop_list[name] = {'quantity': qty, 'measure': measure}
+                shop_list[ingredient_name] = {'measure': measure, 'quantity': quantity}
+
     return shop_list
 
 
-cook_book = read_cook_book_json("cook_book.json")
+
+filename = "recipes.txt"
+
+cook_book = read_cookbook_from_file(filename)
+
+if not cook_book:
+    print("Could not load cookbook.  Make sure recipes.txt exists and is properly formatted.")
+    exit()
+
+dishes_to_cook = ['Запеченный картофель', 'Омлет']
+person_count = 2
+
+shopping_list = get_shop_list_by_dishes(dishes_to_cook, person_count, cook_book)
 
 
-try:
-    person_count = int(input("Введите количество персон: "))
-except ValueError:
-    print("Invalid input. Using 1 person.")
-    person_count = 1
-
-
-dish_choices = {
-    1: ['Запеченный картофель'],
-    2: ['Омлет'],
-    3: ['Утка по-пекински']
-}
-
-try:
-    dish_choice = int(input("Введите номер позиции (1, 2, 3): "))
-    dishes_to_cook = dish_choices.get(dish_choice, [])
-    if not dishes_to_cook:
-        print("Invalid dish choice. No dishes will be cooked.")
-except ValueError:
-    print("Invalid input. No dishes will be cooked.")
-    dishes_to_cook = []
-
-
-shopping_list = get_shop_list_by_dishes(dishes_to_cook,person_count,cook_book)
-
-if shopping_list:
-    print("Shopping List:")
+if shopping_list: #вывод словаря
+    print("{")
     for ingredient, details in shopping_list.items():
-        print(f"{ingredient}: {details['quantity']} {details['measure']}")
+        print(f"  '{ingredient}': {details},")
+    print("}")
+
 else:
     print("No ingredients needed.")
-
